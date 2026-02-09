@@ -1,7 +1,7 @@
 import React from 'react';
 import { Transaction } from '../types';
-import { formatCurrency } from '../constants';
-import { Edit2, Trash2, FileText, Search } from 'lucide-react';
+import { formatCurrency, formatDate } from '../constants';
+import { Edit2, Trash2, FileText, Search, User as UserIcon } from 'lucide-react';
 
 interface TransactionTableProps {
   transactions: Transaction[];
@@ -77,13 +77,19 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
                 STT
               </th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                Tên
+                Ngày
+              </th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                Tên/Đơn vị
               </th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 Nội Dung
               </th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 Số Tiền
+              </th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                Người tạo
               </th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 Ghi Chú
@@ -100,6 +106,9 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {index + 1}
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {formatDate(t.date)}
+                  </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">{t.name}</div>
                   </td>
@@ -108,6 +117,12 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
                   </td>
                   <td className={`px-6 py-4 whitespace-nowrap text-sm font-bold ${colorTheme === 'blue' ? 'text-blue-600' : 'text-orange-600'}`}>
                     {formatCurrency(t.amount)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <div className="flex items-center gap-1.5">
+                       <UserIcon size={14} className="text-gray-400"/>
+                       {t.createdBy || 'Unknown'}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 italic">
                     {t.note || "-"}
@@ -134,7 +149,7 @@ export const TransactionTable: React.FC<TransactionTableProps> = ({
               ))
             ) : (
               <tr>
-                <td colSpan={6} className="px-6 py-10 text-center text-sm text-gray-500">
+                <td colSpan={8} className="px-6 py-10 text-center text-sm text-gray-500">
                   Chưa có dữ liệu nào. Hãy thêm mới!
                 </td>
               </tr>

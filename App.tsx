@@ -1,10 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { formatCurrency, APP_NAME } from './constants';
-import { Transaction, TransactionType, DashboardStats } from './types';
+import { Transaction, TransactionType, DashboardStats, User, Log } from './types';
 import { StatsCard } from './components/StatsCard';
 import { TransactionTable } from './components/TransactionTable';
 import { TransactionForm } from './components/TransactionForm';
 import { Button } from './components/Button';
+import { LoginScreen } from './components/Auth';
+import { AdminPanel } from './components/AdminPanel';
 import { 
   LayoutDashboard, 
   Wallet, 
@@ -13,23 +15,96 @@ import {
   PlusCircle, 
   PieChart as PieChartIcon,
   LogOut,
-  Landmark
+  Landmark,
+  ShieldCheck,
+  User as UserIcon
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 
-// Mock initial data to show empty state nicely or some sample
+// Mock initial data
+const INITIAL_USERS: User[] = [
+  { id: 'admin1', username: 'admin', password: '123', fullName: 'Quản Trị Viên', role: 'admin', createdAt: new Date().toISOString() },
+  { id: 'user1', username: 'staff', password: '123', fullName: 'Nhân Viên 1', role: 'staff', createdAt: new Date().toISOString() },
+];
+
 const INITIAL_DATA: Transaction[] = [
-  { id: '1', name: 'Công ty ABC', content: 'Thu phí dịch vụ tháng 9', amount: 15000000, note: 'Đã thanh toán', date: new Date().toISOString(), type: 'income' },
-  { id: '2', name: 'Nguyễn Văn B', content: 'Mua văn phòng phẩm', amount: 2500000, note: 'Giấy A4, Bút bi', date: new Date().toISOString(), type: 'expense' },
-  { id: '3', name: 'Dự án XYZ', content: 'Thanh toán đợt 1', amount: 50000000, note: '', date: new Date().toISOString(), type: 'income' },
-  { id: '4', name: 'Chi phí điện', content: 'Tiền điện tháng 9', amount: 3200000, note: '', date: new Date().toISOString(), type: 'expense' },
+  { id: '1', name: 'Công ty ABC', content: 'Thu phí dịch vụ tháng 9', amount: 15000000, note: 'Đã thanh toán', date: new Date().toISOString(), type: 'income', createdBy: 'admin', createdById: 'admin1' },
+  { id: '2', name: 'Nguyễn Văn B', content: 'Mua văn phòng phẩm', amount: 2500000, note: 'Giấy A4, Bút bi', date: new Date().toISOString(), type: 'expense', createdBy: 'staff', createdById: 'user1' },
 ];
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'income' | 'expense'>('dashboard');
+  // Auth State
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [users, setUsers] = useState<User[]>(INITIAL_USERS);
+  const [authError, setAuthError] = useState('');
+
+  // App State
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'income' | 'expense' | 'admin'>('dashboard');
   const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_DATA);
+  const [logs, setLogs] = useState<Log[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+
+  // Logging Helper
+  const addLog = (action: string, details: string, user: User) => {
+    const newLog: Log = {
+      id: Date.now().toString(),
+      action,
+      details,
+      userId: user.id,
+      username: user.username,
+      timestamp: new Date().toISOString()
+    };
+    setLogs(prev => [...prev, newLog]);
+  };
+
+  // Auth Handlers
+  const handleLogin = (username: string, password: string) => {
+    const user = users.find(u => u.username === username && u.password === password);
+    if (user) {
+      setCurrentUser(user);
+      setAuthError('');
+      addLog('Đăng nhập', 'Đăng nhập vào hệ thống', user);
+    } else {
+      setAuthError('Tên đăng nhập hoặc mật khẩu không đúng');
+    }
+  };
+
+  const handleRegister = (username: string, password: string, fullName: string) => {
+    if (users.find(u => u.username === username)) {
+      setAuthError('Tên đăng nhập đã tồn tại');
+      return;
+    }
+    const newUser: User = {
+      id: Date.now().toString(),
+      username,
+      password,
+      fullName,
+      role: 'staff', // Default role
+      createdAt: new Date().toISOString()
+    };
+    setUsers([...users, newUser]);
+    setCurrentUser(newUser);
+    setAuthError('');
+    addLog('Đăng ký', `Tạo tài khoản mới: ${username}`, newUser);
+  };
+
+  const handleLogout = () => {
+    if (currentUser) {
+       addLog('Đăng xuất', 'Đăng xuất khỏi hệ thống', currentUser);
+    }
+    setCurrentUser(null);
+    setActiveTab('dashboard');
+  };
+
+  const handleDeleteUser = (userId: string) => {
+    if (!currentUser) return;
+    if (window.confirm('Bạn chắc chắn muốn xóa thành viên này?')) {
+      const userToDelete = users.find(u => u.id === userId);
+      setUsers(users.filter(u => u.id !== userId));
+      addLog('Xóa thành viên', `Đã xóa user: ${userToDelete?.username}`, currentUser);
+    }
+  };
 
   // Computed Stats
   const stats: DashboardStats = useMemo(() => {
@@ -48,29 +123,39 @@ function App() {
     { name: 'Tổng Thu', value: stats.totalIncome },
     { name: 'Tổng Chi', value: stats.totalExpense },
   ];
-  const COLORS = ['#2563eb', '#f97316']; // Blue-600, Orange-500
+  const COLORS = ['#2563eb', '#f97316'];
 
-  // Handlers
+  // Transaction Handlers
   const handleAddTransaction = (data: Omit<Transaction, 'id' | 'date'>) => {
+    if (!currentUser) return;
     const newTransaction: Transaction = {
       ...data,
       id: Date.now().toString(),
       date: new Date().toISOString(),
+      createdBy: currentUser.username,
+      createdById: currentUser.id
     };
     setTransactions(prev => [newTransaction, ...prev]);
     setIsModalOpen(false);
+    addLog('Thêm mới', `Thêm khoản ${data.type === 'income' ? 'thu' : 'chi'}: ${data.name} - ${formatCurrency(data.amount)}`, currentUser);
   };
 
   const handleUpdateTransaction = (data: Omit<Transaction, 'id' | 'date'>) => {
-    if (!editingTransaction) return;
+    if (!editingTransaction || !currentUser) return;
     setTransactions(prev => prev.map(t => t.id === editingTransaction.id ? { ...t, ...data } : t));
     setIsModalOpen(false);
     setEditingTransaction(null);
+    addLog('Cập nhật', `Sửa bản ghi: ${editingTransaction.name}`, currentUser);
   };
 
   const handleDeleteTransaction = (id: string) => {
+    if (!currentUser) return;
     if (window.confirm('Bạn có chắc chắn muốn xóa bản ghi này?')) {
+      const deletedItem = transactions.find(t => t.id === id);
       setTransactions(prev => prev.filter(t => t.id !== id));
+      if (deletedItem) {
+        addLog('Xóa', `Xóa bản ghi: ${deletedItem.name} - ${formatCurrency(deletedItem.amount)}`, currentUser);
+      }
     }
   };
 
@@ -84,7 +169,11 @@ function App() {
     setIsModalOpen(true);
   };
 
-  // Render Helpers
+  // Render Logic
+  if (!currentUser) {
+    return <LoginScreen onLoginSubmit={handleLogin} onRegisterSubmit={handleRegister} error={authError} />;
+  }
+
   const renderTabContent = () => {
     switch (activeTab) {
       case 'dashboard':
@@ -120,7 +209,6 @@ function App() {
 
             {/* Charts Section */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Pie Chart */}
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                 <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
                    <PieChartIcon size={20} className="text-gray-500"/> Tỷ trọng Thu/Chi
@@ -148,7 +236,6 @@ function App() {
                 </div>
               </div>
 
-              {/* Recent Activity Bar Chart (Simplified representation) */}
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                 <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
                   <TrendingUp size={20} className="text-gray-500"/> Biểu đồ tổng quan
@@ -182,8 +269,6 @@ function App() {
                 </div>
               </div>
             </div>
-            
-            {/* Recent Transactions Snippet could go here, but omitted for brevity to keep code clean */}
           </div>
         );
       case 'income':
@@ -230,6 +315,15 @@ function App() {
              />
           </div>
         );
+      case 'admin':
+        return currentUser.role === 'admin' ? (
+          <AdminPanel 
+            users={users} 
+            logs={logs} 
+            onDeleteUser={handleDeleteUser}
+            currentUser={currentUser}
+          />
+        ) : <div className="p-8 text-center text-red-500">Bạn không có quyền truy cập trang này.</div>;
     }
   };
 
@@ -241,22 +335,22 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex">
-              <div className="flex-shrink-0 flex items-center gap-2">
+              <div className="flex-shrink-0 flex items-center gap-2 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
                 <div className="bg-blue-600 p-1.5 rounded-lg text-white">
                   <Landmark size={24} />
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold text-gray-900 tracking-tight leading-tight">FinControl</h1>
-                  <p className="text-xs text-gray-500 font-medium">{APP_NAME}</p>
+                  <h1 className="text-xl font-bold text-gray-900 tracking-tight leading-tight hidden md:block">FinControl</h1>
+                  <p className="text-xs text-gray-500 font-medium hidden md:block">{APP_NAME}</p>
                 </div>
               </div>
-              <div className="hidden sm:ml-10 sm:flex sm:space-x-8">
+              <div className="ml-4 sm:ml-10 flex space-x-2 sm:space-x-8 overflow-x-auto">
                 {['dashboard', 'income', 'expense'].map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab as any)}
                     className={`
-                      inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors duration-200
+                      inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors duration-200 whitespace-nowrap
                       ${activeTab === tab 
                         ? 'border-blue-500 text-gray-900' 
                         : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}
@@ -267,20 +361,40 @@ function App() {
                     {tab === 'expense' && 'Quản Lý Chi'}
                   </button>
                 ))}
+                {currentUser.role === 'admin' && (
+                  <button
+                    onClick={() => setActiveTab('admin')}
+                    className={`
+                      inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors duration-200 whitespace-nowrap
+                      ${activeTab === 'admin' 
+                        ? 'border-blue-500 text-gray-900' 
+                        : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}
+                    `}
+                  >
+                    <ShieldCheck size={16} className="mr-1"/> Quản trị
+                  </button>
+                )}
               </div>
             </div>
-            <div className="flex items-center">
-              <div className="bg-gray-100 rounded-full px-4 py-1.5 text-sm font-semibold text-gray-700 border border-gray-200 hidden md:block">
-                Còn lại: <span className={stats.balance >= 0 ? "text-blue-600" : "text-red-600"}>{formatCurrency(stats.balance)}</span>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                 <div className="text-right hidden sm:block">
+                   <p className="text-sm font-medium text-gray-900">{currentUser.fullName}</p>
+                   <p className="text-xs text-gray-500">{currentUser.role === 'admin' ? 'Quản trị viên' : 'Nhân viên'}</p>
+                 </div>
+                 <div className="h-8 w-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600">
+                    <UserIcon size={18} />
+                 </div>
               </div>
+              <button 
+                onClick={handleLogout}
+                className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+                title="Đăng xuất"
+              >
+                <LogOut size={20} />
+              </button>
             </div>
           </div>
-        </div>
-        {/* Mobile Menu (simplified) */}
-        <div className="sm:hidden flex border-t border-gray-100">
-           <button onClick={() => setActiveTab('dashboard')} className={`flex-1 py-3 text-sm font-medium ${activeTab === 'dashboard' ? 'text-blue-600 bg-blue-50' : 'text-gray-500'}`}>Dashboard</button>
-           <button onClick={() => setActiveTab('income')} className={`flex-1 py-3 text-sm font-medium ${activeTab === 'income' ? 'text-blue-600 bg-blue-50' : 'text-gray-500'}`}>Thu</button>
-           <button onClick={() => setActiveTab('expense')} className={`flex-1 py-3 text-sm font-medium ${activeTab === 'expense' ? 'text-blue-600 bg-blue-50' : 'text-gray-500'}`}>Chi</button>
         </div>
       </header>
 
@@ -310,7 +424,7 @@ function App() {
                     </h3>
                     <div className="mt-4">
                       <TransactionForm 
-                        type={activeTab === 'dashboard' ? 'income' : activeTab} // Default to income if on dashboard
+                        type={activeTab === 'dashboard' ? 'income' : activeTab === 'admin' ? 'income' : activeTab} // Fallback logic
                         initialData={editingTransaction}
                         onSubmit={editingTransaction ? handleUpdateTransaction : handleAddTransaction}
                         onCancel={() => setIsModalOpen(false)}
@@ -327,7 +441,6 @@ function App() {
   );
 }
 
-// Temporary icon import for modal to avoid error
 import { Edit2 } from 'lucide-react';
 
 export default App;
